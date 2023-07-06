@@ -1,11 +1,14 @@
-import math
+import math, decimal, copy
 from collections import deque
+import matplotlib.pyplot as plt
+import numpy as np
 
 WIDTH = 50
 HEIGHT = 50
-DX = 0.1         # 위치 간격
-DT = 0.01        # 시간 간격
-V = 1.0          # 파동의 속도
+HORIZONTAL = 0
+VERTICAL = 1
+DT = decimal.Decimal('0.01')
+ALPHA = decimal.Decimal('0.5')
 
 def posToVector(p1, p2, forceValue) -> tuple:
     '''
@@ -25,12 +28,9 @@ class VectorField:
         '''
         self.width = width
         self.height = height
-        self.field = [[(0, 0)] * width for _ in range(height)]
+        self.field = [[(decimal.Decimal(0), decimal.Decimal(0))] * width for _ in range(height)]
         self.visited = [[False] * width for _ in range(height)]
     
-    def gaussian(self, x, dx = DX):
-        return math.exp(-((x - 0.5 * self.width * dx) / (0.1 * self.width * dx))**2)
-
     def addForce(self, pos, force, team = None) -> None:
         '''
         addForce(pos, force) -> None
@@ -41,13 +41,14 @@ class VectorField:
         for i in range(len(pos)):
             np = self.field[pos[i][0]][pos[i][1]]
             self.field[pos[i][0]][pos[i][1]] = (np[0] + force[i][0], np[1] + force[i][1])
-            self.visited[pos[i][0]][pos[i][1]] = True
+            #self.visited[pos[i][0]][pos[i][1]] = True
             startPoints.append(pos[i])
         self.getPointForce(startPoints)
 
-    def getPointForce(self, startPoints: deque, dx = DX, dt = DT, v = V) -> None:
+    def getPointForce(self, startPoints: deque, alpha = ALPHA, dt = DT) -> None:
         '''
         BFS를 이용해서 각 점에서의 힘을 구할 수 있다.
+        '''
         '''
         queue = deque()
         while startPoints:
@@ -68,39 +69,49 @@ class VectorField:
                 if not self.visited[y + 1][x]:
                     self.visited[y + 1][x] = True
                     queue.append((y + 1, x))
-        while queue:
-            y, x = queue.popleft()
-            vectors = []
-            if x != 0:
-                vectors.append(self.field[y][x - 1])
-                if not self.visited[y][x - 1]:
-                    self.visited[y][x - 1] = True
-                    queue.append((y, x - 1))
-            if x != self.width- 1:
-                vectors.append(self.field[y][x + 1])
-                if not self.visited[y][x + 1]:
-                    self.visited[y][x + 1] = True
-                    queue.append((y, x + 1))
-            if y != 0:
-                vectors.append(self.field[y - 1][x])
-                if not self.visited[y - 1][x]:
-                    self.visited[y - 1][x] = True
-                    queue.append((y - 1, x))
-            if y != self.height - 1:
-                vectors.append(self.field[y + 1][x])
-                if not self.visited[y + 1][x]:
-                    self.visited[y + 1][x] = True
-                    queue.append((y + 1, x))
-            np = self.field[y][x]
-            vectors.append(np)
-            psix = self.gaussian(self.field[y][x][0], dx = dx), self.gaussian(self.field[y][x + 1][0], dx = dx) if x < self.width - 1 else 0, self.gaussian(self.field[y][x - 1][0], dx = dx) if x > 0 else 0
-            psiy = self.gaussian(self.field[y][x][0], dx = dx), self.gaussian(self.field[y - 1][x][0], dx = dx) if y < self.height - 1 else 0, self.gaussian(self.field[y - 1][x][0], dx = dx) if y > 0 else 0
-            xg = 2 * psix[0] - psix[-1] - psix[1] + (v*dt/dx)**2 * (psix[-1] - 2 * psix[0] + psix[1]) - psiy[-1] - psiy[1] + (v*dt/dx)**2 * (psiy[-1] - 2*psiy[0] + psiy[1])
-            psix = self.gaussian(self.field[y][x][1], dx = dx), self.gaussian(self.field[y][x + 1][1], dx = dx) if x < self.width - 1 else 0, self.gaussian(self.field[y][x - 1][1], dx = dx) if x > 0 else 0
-            psiy = self.gaussian(self.field[y][x][1], dx = dx), self.gaussian(self.field[y - 1][x][1], dx = dx) if y < self.height - 1 else 0, self.gaussian(self.field[y - 1][x][1], dx = dx) if y > 0 else 0
-            yg = 2 * psix[0] - psix[-1] - psix[1] + (v*dt/dx)**2 * (psix[-1] - 2 * psix[0] + psix[1]) - psiy[-1] - psiy[1] + (v*dt/dx)**2 * (psiy[-1] - 2*psiy[0] + psiy[1])
-            self.field[y][x] = (yg, xg)
-        self.visited = [[False] * self.width for _ in range(self.height)]
+        '''
+        def df(y, x, mod = HORIZONTAL):
+            if mod == HORIZONTAL:
+                if x < self.width:
+                    right = self.field[y][x + 1][0] if x < self.width - 1 else 0
+                    left = self.field[y][x - 1][0] if x > 0 else 0
+                    return (right - left)
+            else:
+                if y < self.height:
+                    right = self.field[y + 1][x][1] if y < self.height - 1 else 0
+                    left = self.field[y - 1][x][1] if y > 0 else 0
+                    return (right - left)
+            return 0
+            
+        queue = copy.copy(startPoints)
+        for _ in range(int(1/dt)):
+            while queue:
+                y, x = queue.popleft()
+                d2v = [0] * 2
+                if x != 0:
+                    if not self.visited[y][x - 1]:
+                        self.visited[y][x - 1] = True
+                        queue.append((y, x - 1))
+                if x != self.width - 1:
+                    if not self.visited[y][x + 1]:
+                        self.visited[y][x + 1] = True
+                        queue.append((y, x + 1))
+                if y != 0:
+                    if not self.visited[y - 1][x]:
+                        self.visited[y - 1][x] = True
+                        queue.append((y - 1, x))
+                if y != self.height - 1:
+                    if not self.visited[y + 1][x]:
+                        self.visited[y + 1][x] = True
+                        queue.append((y + 1, x))
+                d2v[0] = (df(y, x + 1, HORIZONTAL) - df(y, x - 1, HORIZONTAL)) / 2
+                d2v[1] = (df(y + 1, x, VERTICAL) - df(y - 1, x, VERTICAL)) / 2
+                if (y, x) == (HEIGHT//2-1, WIDTH//2-1) : print(d2v)
+                self.field[y][x] = (self.field[y][x][0] + d2v[0] * alpha, self.field[y][x][1] + d2v[1] * alpha)
+            self.visited = [[False] * self.width for _ in range(self.height)]
+            queue = copy.copy(startPoints)
+            #for i in range(HEIGHT) : plt.plot(list(map(lambda x : ((math.sqrt(x[0]*x[0] + x[1]*x[1]))), self.field[i])))
+            #plt.show()
 
 class GameField:
     def __init__(self, width = WIDTH, height = HEIGHT) -> None:
@@ -122,12 +133,12 @@ class GameField:
 
 sum_ = lambda x : x*(x+1)//2
 gf = GameField()
-gf.force.addForce([(HEIGHT//2-1, WIDTH//2-1)],[(10,5)])
+gf.force.addForce([(HEIGHT//2-1, WIDTH//2-1)],[(-30,-30)])
 gf.update()
-import matplotlib.pyplot as plt
+
 data = gf.force.field
 plt.figure(figsize=(WIDTH,HEIGHT))
-plt.imshow([list(map(lambda x : int((math.sqrt(x[0]*x[0] + x[1]*x[1]))), data[i])) for i in range(HEIGHT)])
+plt.imshow([list(map(lambda x : ((math.sqrt(x[0]*x[0] + x[1]*x[1]))), data[i])) for i in range(HEIGHT)])
 plt.show()
 plt.figure(figsize=(WIDTH,HEIGHT))
 plt.imshow(gf.team)
